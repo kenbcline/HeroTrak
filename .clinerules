@@ -1,0 +1,22 @@
+# HeroTrak Project Rules & Guidelines
+
+## 1. Project Philosophy & Design Goals
+- **Domain:** Hero System 6e Initiative & Turn Tracker.
+- **Architecture:** Clean, layered architecture (`lib/core/`, `lib/domain/`, `lib/presentation/`).
+- **Target Devices:** Large screens (Desktop & Tablets across macOS, Windows, Linux, iOS, Android).
+- **Execution Mode:** No-fluff, test-driven development (TDD).
+
+## 2. Code Quality & Standards
+- Keep business logic strictly out of UI widgets. Use Riverpod (or explicit controller providers) for state.
+- Ensure all domain models are immutable (`Equatable` or `copyWith` patterns).
+- Do not invent non-standard 6e rules. Rely on standard 6e Speed Chart and initiative mechanics unless explicitly configured as a custom action mutation.
+- Code must be cleanly formatted and pass `flutter analyze` with zero errors or severe warnings.
+
+## 3. Autonomous TDD Loop Directive
+- After creating or modifying features in `lib/`, immediately update or create corresponding unit/widget tests in `test/`.
+- Always execute `flutter test` via terminal after completing a task.
+- If any test fails, read the error stack trace, diagnose the issue, refactor the code/test, and re-run until 100% of tests pass.
+
+## 4. UI & Interaction Patterns
+- Keyboard-first desktop experience: hotkeys must be preserved and supported in presentation layers.
+- Non-modal UX preferred: favor inline updates, hotkey triggers, and persistent dock views over popup dialogs.
