@@ -49,6 +49,7 @@ dev_dependencies:
   # package. See that file for information about deactivating specific lint
   # rules and activating additional ones.
   flutter_lints: ^6.0.0
+  flutter_launcher_icons: ^0.14.4
 
 # For information on the generic Dart part of this file, see the
 # following page: https://dart.dev/tools/pub/pubspec
@@ -91,3 +92,15 @@ flutter:
   #
   # For details regarding fonts from package dependencies,
   # see https://flutter.dev/to/font-from-package
+
+flutter_launcher_icons:
+  # flutter_launcher_icons 0.14.x decodes raster images only — the SVG
+  # source (icon/HeroTrakIcon.svg) is rendered here as its 1024px PNG
+  # counterpart.
+  image_path: "icon/HeroTrakIcon.png"
+  macos:
+    generate: true
+  windows:
+    generate: true
+  android:
+    generate: true
