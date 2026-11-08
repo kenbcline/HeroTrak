@@ -80,7 +80,7 @@ flutter test
 # 4. Universal macOS release build.
 # ---------------------------------------------------------------------------
 echo "==> Building universal macOS release"
-flutter build macos --release --target-platform macos-universal
+flutter build macos --release
 
 # ---------------------------------------------------------------------------
 # 5. Package the app bundle for distribution.
