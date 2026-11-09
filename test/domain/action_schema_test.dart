@@ -207,7 +207,7 @@ void main() {
       const bracketed = <String, String>{
         '[A]bort to Defensive Action': 'abort_to_defensive_action',
         'Declare Hay[M]aker': 'declare_haymaker',
-        'Interrupt with [H]old': 'interrupt_with_hold',
+        '[H]old Action': 'interrupt_with_hold',
       };
       for (final entry in bracketed.entries) {
         final hotkey = entry.key

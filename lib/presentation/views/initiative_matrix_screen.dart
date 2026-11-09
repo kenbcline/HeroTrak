@@ -38,11 +38,62 @@ class InitiativeMatrixScreen extends ConsumerWidget {
             const Row(
               crossAxisAlignment: CrossAxisAlignment.start,
               children: <Widget>[
-                Expanded(child: ActiveCombatantPanel()),
-                Expanded(child: TargetCombatantPanel()),
+                Expanded(
+                  child: Column(
+                    crossAxisAlignment: CrossAxisAlignment.stretch,
+                    mainAxisSize: MainAxisSize.min,
+                    children: <Widget>[
+                      _PanelSectionHeader(
+                        label: 'Acting Combatant',
+                        key: Key('acting-combatant-header'),
+                      ),
+                      ActiveCombatantPanel(),
+                    ],
+                  ),
+                ),
+                Expanded(
+                  child: Column(
+                    crossAxisAlignment: CrossAxisAlignment.stretch,
+                    mainAxisSize: MainAxisSize.min,
+                    children: <Widget>[
+                      _PanelSectionHeader(
+                        label: 'Target Combatant',
+                        key: Key('target-combatant-header'),
+                      ),
+                      TargetCombatantPanel(),
+                    ],
+                  ),
+                ),
               ],
             ),
           ],
+        ),
+      ),
+    );
+  }
+}
+
+/// Prominent section header rendered directly above each lower panel so the
+/// Acting (Active) and Target (Actee) combatants are labeled at a glance.
+class _PanelSectionHeader extends StatelessWidget {
+  const _PanelSectionHeader({required this.label, super.key});
+
+  final String label;
+
+  @override
+  Widget build(BuildContext context) {
+    return Material(
+      color: Theme.of(context).colorScheme.surfaceContainerHigh,
+      child: Padding(
+        padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 4),
+        child: Text(
+          label,
+          style: TextStyle(
+            fontSize: 12,
+            fontWeight: FontWeight.w800,
+            letterSpacing: 1.1,
+            color: Theme.of(context).colorScheme.primary,
+          ),
         ),
       ),
     );

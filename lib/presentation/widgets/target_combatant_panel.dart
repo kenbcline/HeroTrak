@@ -3,6 +3,8 @@ import 'package:flutter_riverpod/flutter_riverpod.dart';
 
 import '../../domain/actions/actions.dart';
 import '../../domain/models/models.dart';
+import '../../domain/services/phase_display.dart';
+import '../../domain/services/timeline_traversal.dart';
 import '../state/turn_engine_notifier.dart';
 
 /// Right bottom panel: the **Target Combatant (Actee)** — the subject of
@@ -11,8 +13,12 @@ import '../state/turn_engine_notifier.dart';
 /// Shows the target's name and Faction badge, the real-time OCV/DCV
 /// tactical modifiers, the `[A]bort to Defensive Action` reaction (applied
 /// to the target immediately, clearing any pending Haymakers, without
-/// advancing the timeline clock) and the un-bracketed status toggles
-/// (`OK`, `STUN`, `DYING`, `KO`, `DEAD`).
+/// advancing the timeline clock), the `Use [H]old` out-of-turn hold
+/// resolution (rendered while the target maintains an active held state),
+/// and the un-bracketed status toggles (`OK`, `STUN`, `DYING`, `KO`,
+/// `DEAD`). The `[A]bort` reaction is hard-locked while the target's
+/// upcoming phase renders `[REC]` / `[CLR STUN]` (see
+/// [isPhaseActionLocked]).
 class TargetCombatantPanel extends ConsumerWidget {
   const TargetCombatantPanel({super.key});
 
@@ -47,6 +53,18 @@ class TargetCombatantPanel extends ConsumerWidget {
                     // Non-modal UX: an invalid reaction is a silent no-op.
                   }
                 },
+                onUseHold: () {
+                  // Out-of-turn hold resolution: the main timeline cursor
+                  // stays on the active phase — only the target's held slot
+                  // is consumed.
+                  try {
+                    ref
+                        .read(turnEngineProvider.notifier)
+                        .useHeldAction(combatant.id);
+                  } on StateError {
+                    // Non-modal UX: a silent no-op.
+                  }
+                },
                 onAdjustSpd: (change) => ref
                     .read(turnEngineProvider.notifier)
                     .adjustSpdDelta(combatant.id, change),
@@ -78,6 +96,7 @@ class _TargetDetails extends StatelessWidget {
     required this.combatant,
     required this.onStatusSelected,
     required this.onAbort,
+    required this.onUseHold,
     required this.onAdjustSpd,
     required this.onClearReaction,
   });
@@ -86,6 +105,7 @@ class _TargetDetails extends StatelessWidget {
   final Combatant combatant;
   final ValueChanged<CombatantStatus> onStatusSelected;
   final VoidCallback onAbort;
+  final VoidCallback onUseHold;
   final ValueChanged<int> onAdjustSpd;
   final VoidCallback onClearReaction;
 
@@ -182,9 +202,24 @@ class _TargetDetails extends StatelessWidget {
           children: <Widget>[
             OutlinedButton(
               key: const Key('target-action-abort'),
-              onPressed: onAbort,
+              // Hard-locked on mandatory recovery/clear-stun phases.
+              onPressed: isPhaseActionLocked(combatant, state.activeSegment)
+                  ? null
+                  : onAbort,
               child: const Text('[A]bort to Defensive Action'),
             ),
+            // Out-of-turn hold resolution: shown while the target maintains
+            // an active held state (declaring phase held or virtual [HOLD]
+            // stop) so the GM can fire the held action as an interrupt or
+            // defensive abort without moving the main timeline cursor.
+            if (isVirtualHoldStop(combatant, state.activeSegment) ||
+                combatant.phaseSlots
+                    .any((slot) => slot.status == PhaseStatus.held))
+              OutlinedButton(
+                key: const Key('target-action-use-hold'),
+                onPressed: onUseHold,
+                child: const Text('Use [H]old'),
+              ),
             OutlinedButton(
               key: const Key('target-clear-reaction'),
               onPressed: onClearReaction,

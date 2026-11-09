@@ -70,7 +70,7 @@ character *on* another:
 | --- | --- | --- |
 | Driven by | Timeline phase focus **only** (Left/Right, Prev/Next Phase, Space) | Column 1 clicks and Up/Down target-cursor keys |
 | Panel | `ActiveCombatantPanel` (left) | `TargetCombatantPanel` (right) |
-| Actions | `Declare Hay[M]aker`, `Interrupt with [H]old`, `[C]lear Action` (all bound to the actor; hotkeys M/H/C) | `[A]bort to Defensive Action` (hotkey A), `Clear Reaction`, `SPD +1/-1`, status toggles (OK/STUN/DYING/KO/DEAD) |
+| Actions | `Declare Hay[M]aker`, `[H]old Action`, `[C]lear Action` (all bound to the actor; hotkeys M/H/C) | `[A]bort to Defensive Action` (hotkey A), `Clear Reaction`, `SPD +1/-1`, status toggles (OK/STUN/DYING/KO/DEAD) |
 | Highlight | Row tint (`kActiveRowColor`; lighter grey on dead rows) | Column 1 cell only (`kTargetRowColor`; `kDeadSelectedRowColor` on dead rows) |
 
 Target navigation is *pure selection*: it never advances the turn clock,

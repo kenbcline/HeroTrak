@@ -42,7 +42,8 @@ class AbortActionIntent extends Intent {
   const AbortActionIntent();
 }
 
-/// Executes **Interrupt with [H]old** (KeyH).
+/// Executes **[H]old Action** (KeyH): declares a hold, or resolves an
+/// active held action via `Use [H]old`.
 class HoldActionIntent extends Intent {
   const HoldActionIntent();
 }
@@ -69,7 +70,7 @@ class ClearActionIntent extends Intent {
 /// | Right Arrow       | Next phase on the timeline      |
 /// | Left Arrow        | Previous phase on the timeline  |
 /// | A                 | [A]bort to Defensive Action     |
-/// | H                 | Interrupt with [H]old           |
+/// | H                 | [H]old Action                     |
 /// | M                 | Declare Hay[M]aker              |
 /// | N                 | Add Combatant dialog            |
 ///

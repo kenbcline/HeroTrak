@@ -108,6 +108,16 @@ class ActionDefinition extends Equatable {
     interruptWithHold,
   ];
 
+  /// Ids of the maneuver actions (`[A]bort`, Hay`[M]aker`, `[H]old`) that are
+  /// hard-locked while the subject's upcoming phase renders `[REC]` or
+  /// `[CLR STUN]` — the mandatory recovery / clear-stun action is the only
+  /// legal choice on those phases (see `isPhaseActionLocked`).
+  static List<String> get lockedDuringRecoveryIds => <String>[
+        abortToDefensiveAction.id,
+        declareHaymaker.id,
+        interruptWithHold.id,
+      ];
+
   @override
   List<Object?> get props => [id, label, hotkey, targetType, mutations];
 }

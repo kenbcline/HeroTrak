@@ -449,6 +449,26 @@ class TurnEngineNotifier extends Notifier<TurnState> {
       );
     }
 
+    // Action lockdown: while the subject's upcoming phase renders `[REC]` or
+    // `[CLR STUN]` (KO'd / Dying / Stunned), the mandatory recovery/clear-stun
+    // action is the only legal choice — the maneuver actions (`[A]bort`,
+    // Hay`[M]aker`, `[H]old`) are hard-locked and rejected atomically.
+    if (ActionDefinition.lockedDuringRecoveryIds.contains(action.id)) {
+      final subjectIndex = state.combatants.indexWhere(
+        (combatant) => combatant.id == subjectId,
+      );
+      if (subjectIndex >= 0 &&
+          isPhaseActionLocked(
+            state.combatants[subjectIndex],
+            state.activeSegment,
+          )) {
+        throw StateError(
+          'executeAction(${action.id}): combatant "$subjectId" is locked to '
+          'the mandatory recovery/clear-stun action',
+        );
+      }
+    }
+
     var combatants = List<Combatant>.of(state.combatants);
     final declarations =
         List<HaymakerDeclaration>.of(state.haymakerDeclarations);
@@ -483,6 +503,40 @@ class TurnEngineNotifier extends Notifier<TurnState> {
       combatants: _sortedCombatants(combatants),
       haymakerDeclarations: declarations,
     );
+  }
+
+  /// Uses the subject's pending held action — the "Use [H]old" command.
+  ///
+  /// Resolves the interrupt immediately: the [PhaseStatus.held] slot is
+  /// consumed ([PhaseStatus.spent]) and the transient `held` badge clears,
+  /// which in turn clears the virtual `[HOLD]` timeline markers (they derive
+  /// purely from the held slot state — see `virtualHoldLabel`).
+  ///
+  /// Throws [StateError] when the subject has no held action pending; the
+  /// turn state is left untouched.
+  void useHeldAction(String combatantId) {
+    final combatants = List<Combatant>.of(state.combatants);
+    final index = _indexOfCombatant(combatants, combatantId, 'useHeldAction');
+    final subject = combatants[index];
+    final heldIndex = subject.phaseSlots.indexWhere(
+      (slot) => slot.status == PhaseStatus.held,
+    );
+    if (heldIndex < 0) {
+      throw StateError(
+        'useHeldAction: combatant "$combatantId" has no held action pending',
+      );
+    }
+
+    final slots = List<PhaseSlot>.of(subject.phaseSlots);
+    slots[heldIndex] = slots[heldIndex].copyWith(status: PhaseStatus.spent);
+    combatants[index] = subject.copyWith(
+      phaseSlots: slots,
+      statusBadges: <PhaseStatus>[
+        for (final badge in subject.statusBadges)
+          if (badge != PhaseStatus.held) badge,
+      ],
+    );
+    state = state.copyWith(combatants: _sortedCombatants(combatants));
   }
 
   /// Sets the overall condition ([CombatantStatus]) of [combatantId].

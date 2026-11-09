@@ -18,7 +18,7 @@ devices) and is built with Flutter + Riverpod.
 - **Dual bottom panels** —
   - **Active Combatant (Actor):** name + faction, SPD/DEX/EGO, live status
     badges, and initiative actions (`Declare Hay[M]aker`,
-    `Interrupt with [H]old`, `[C]lear Action`).
+    `[H]old Action` / `Use [H]old`, `[C]lear Action`).
   - **Target Combatant (Actee):** name + faction, a real-time OCV/DCV
     tactical card, reactions (`[A]bort to Defensive Action`,
     `Clear Reaction`), `SPD +1` / `SPD -1` Aid/Drain adjusters, and the
@@ -46,7 +46,7 @@ devices) and is built with Flutter + Riverpod.
 | `→` / **Next Phase** | Walk to the next timeline phase (auto-selects its owner as Actor). Past the last phase, steps onto **Post-12**; from Post-12, prompts **Start Next Turn?** |
 | `←` / **Prev Phase** | Walk to the previous phase. From Post-12, disengages it and returns to the Turn's last phase |
 | `M` | Declare Hay[M]aker on the Actor (wind-up on N, **Strikes** on N+1; Segment-12 declarations strike on Segment 1 of the next Turn) |
-| `H` | Interrupt with [H]old on the Actor (held actions resolve first in a segment) |
+| `H` | [H]old Action on the Actor (held actions resolve first in a segment) |
 | `C` | [C]lear Action — release Holds and cancel Haymakers, restoring normal phase markers |
 
 ### Target controls (Actee)

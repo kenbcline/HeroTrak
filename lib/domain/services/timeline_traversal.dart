@@ -1,6 +1,7 @@
 import 'package:equatable/equatable.dart';
 
 import '../models/models.dart';
+import 'phase_display.dart';
 import 'segment_queue.dart';
 
 /// A position on the Turn's combat timeline: the segment being resolved and
@@ -35,8 +36,9 @@ List<String> resolutionIdsAtSegment(TurnState state, int segment) {
 
 /// Whether [combatant] is bypassed in phase traversal. Only the dead are
 /// skipped: their row is cleared entirely. Recovery pseudo-phases ([REC] for
-/// KO/dying, `[CLR STUN]` for stunned) are valid stop points so the GM is
-/// alerted to resolve recovery before advancing.
+/// KO/dying, `[CLR STUN]` for stunned) and virtual `[HOLD]` stops are valid
+/// stop points so the GM is alerted to resolve recovery / use the hold before
+/// advancing.
 bool _isBypassedInTraversal(Combatant combatant) {
   return combatant.status == CombatantStatus.dead;
 }
@@ -54,12 +56,41 @@ List<String> _queueStopIds(TurnState state, int segment) {
 }
 
 /// Navigation stops of [segment] in timeline order: pseudo-phases first,
-/// then [phaseIdsAtSegment]. Same dedupe/bypass rules as [_queueStopIds].
+/// then virtual `[HOLD]` stops, then [phaseIdsAtSegment]. Same dedupe/bypass
+/// rules as [_queueStopIds].
 List<String> _timelineStopIds(TurnState state, int segment) {
   return _navigationStops(state, [
     ...resolutionIdsAtSegment(state, segment),
+    ...virtualHoldIdsAtSegment(state, segment),
     ...phaseIdsAtSegment(state, segment),
   ]);
+}
+
+/// Whether [combatant] is on an active virtual `[HOLD]` stop at [segment]:
+/// their held slot's span covers [segment] as a strictly intermediate segment
+/// (`declSeg < segment < nextNatural`).
+///
+/// The span is evaluated with [segment] itself as the cursor (see
+/// [virtualHoldSpan]), so eligibility depends only on whether [segment] lies
+/// inside the span — `prev phase` and `next phase` behave symmetrically,
+/// independent of [TurnState.activeSegment].
+bool isVirtualHoldStop(Combatant combatant, int segment) {
+  final span = virtualHoldSpan(combatant, segment);
+  return span != null && segment > span.$1 && segment < span.$2;
+}
+
+/// The ids of combatants on an active virtual `[HOLD]` stop at [segment] (see
+/// [isVirtualHoldStop]), in roster order, deduplicated — a combatant with a
+/// natural scheduled phase or haymaker resolution at [segment] is listed only
+/// once by [_navigationStops].
+List<String> virtualHoldIdsAtSegment(TurnState state, int segment) {
+  final ids = <String>[];
+  for (final combatant in state.combatants) {
+    if (isVirtualHoldStop(combatant, segment) && !ids.contains(combatant.id)) {
+      ids.add(combatant.id);
+    }
+  }
+  return ids;
 }
 
 List<String> _navigationStops(TurnState state, List<String> ids) {
@@ -119,33 +150,41 @@ TimelinePosition? findNextPhasePosition(TurnState state) {
 /// the current cursor, or `null` at the very start of the Turn.
 ///
 /// Reverse of [findNextPhasePosition]: the walk goes backward through the
-/// active segment's sorted stops (pseudo-phases first), then steps back
-/// through Segments -1, -2, ... skipping empty ones, landing on the *last*
-/// stop of the nearest earlier segment that contains one. KO/Dead
-/// combatants are bypassed.
+/// active segment's sorted stops (pseudo-phases first, then virtual `[HOLD]`
+/// stops), then steps back through Segments -1, -2, ... skipping empty ones,
+/// landing on the *last* stop of the nearest earlier segment that contains
+/// one. KO/Dead combatants are bypassed.
+///
+/// Intermediate virtual `[HOLD]` stops ([virtualHoldIdsAtSegment]) are valid
+/// backward stops: a held combatant is focused once per span segment
+/// (`declSeg < seg < nextNatural`) so `prev phase` steps cleanly onto each
+/// virtual hold segment without re-highlighting the combatant at both a
+/// queue carry-in position and their baseline slot.
 TimelinePosition? findPreviousPhasePosition(TurnState state) {
-  final queue = _queueStopIds(state, state.activeSegment);
-  final index = state.activeCombatantId == null
-      ? -1
-      : queue.indexOf(state.activeCombatantId!);
+  final segment = state.activeSegment;
+  final queue = _timelineStopIds(state, segment);
+  final index =
+      state.activeCombatantId == null ? -1 : queue.indexOf(state.activeCombatantId!);
 
   if (index > 0) {
     return TimelinePosition(
-      segment: state.activeSegment,
+      segment: segment,
       combatantId: queue[index - 1],
     );
   }
   if (index < 0 && queue.isNotEmpty) {
+    // Nothing selected (or the selection has no baseline phase here): the
+    // walk resumes at the last stop of the resolved segment.
     return TimelinePosition(
-      segment: state.activeSegment,
+      segment: segment,
       combatantId: queue.last,
     );
   }
 
-  for (var segment = state.activeSegment - 1; segment >= 1; segment--) {
-    final ids = _timelineStopIds(state, segment);
+  for (var earlier = segment - 1; earlier >= 1; earlier--) {
+    final ids = _timelineStopIds(state, earlier);
     if (ids.isNotEmpty) {
-      return TimelinePosition(segment: segment, combatantId: ids.last);
+      return TimelinePosition(segment: earlier, combatantId: ids.last);
     }
   }
   return null;

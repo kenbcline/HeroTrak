@@ -301,11 +301,12 @@ void main() {
           .combatants
           .firstWhere((combatant) => combatant.id == id);
 
-      // Stunned shows [CLR STUN]; KO shows [REC]; dying renders a standard
-      // slot (natural Phase Recoveries are suppressed while dying).
+      // Stunned shows [CLR STUN]; KO and dying render [REC] across their
+      // active phases (dying strips maneuver icons; [BLEED] is maintained on
+      // Post-12).
       expect(cellText('st', '[CLR STUN]'), findsOneWidget);
       expect(cellText('ko', '[REC]'), findsOneWidget);
-      expect(cellText('dy', '●'), findsOneWidget);
+      expect(cellText('dy', '[REC]'), findsOneWidget);
 
       // OK on the targeted stunned combatant: the marker clears back to a
       // standard phase slot — available (scheduled) immediately.
@@ -324,8 +325,7 @@ void main() {
       expect(cellText('ko', '●'), findsOneWidget);
       expect(subjectOf('ko').phaseSlots.single.status, PhaseStatus.scheduled);
 
-      // ...and the dying combatant (already on a standard slot) is
-      // unchanged by OK.
+      // ...and the dying combatant clears [REC] back to a standard slot on OK.
       await tester.tap(find.byKey(const Key('matrix-row-dy')));
       await tester.pumpAndSettle();
       await tester.tap(find.byKey(const Key('detail-status-OK')));
@@ -488,6 +488,168 @@ void main() {
         [8, 10, 12],
       );
       expect(find.text('5'), findsWidgets);
+    });
+  });
+
+  group('dual-panel Use [H]old resolution', () {
+    // `holder` holds its Segment-3 phase; next natural DEX phase at
+    // Segment 8 → virtual [HOLD] span (3, 8), intermediate stops 4–7.
+    List<Combatant> heldRoster() => [
+          makeCombatant(
+            id: 'holder',
+            phaseSlots: [
+              PhaseSlot(segment: 3, status: PhaseStatus.held),
+              PhaseSlot(segment: 8),
+            ],
+            statusBadges: [PhaseStatus.held],
+          ),
+        ];
+
+    testWidgets('Use [H]old renders on the Actor Panel during a virtual hold '
+        'stop', (tester) async {
+      await pumpScreen(
+        tester,
+        makeTurnState(
+          activeSegment: 5,
+          activeCombatantId: 'holder',
+          combatants: heldRoster(),
+        ),
+      );
+
+      expect(
+        inPanel('active-combatant-panel', find.text('Use [H]old')),
+        findsOneWidget,
+      );
+      expect(
+        inPanel('active-combatant-panel', find.text('[H]old Action')),
+        findsNothing,
+      );
+    });
+
+    testWidgets('Use [H]old renders on the Actor Panel on the original '
+        'declaring phase', (tester) async {
+      await pumpScreen(
+        tester,
+        makeTurnState(
+          activeSegment: 3,
+          activeCombatantId: 'holder',
+          combatants: heldRoster(),
+        ),
+      );
+
+      expect(
+        inPanel('active-combatant-panel', find.text('Use [H]old')),
+        findsOneWidget,
+      );
+    });
+
+    testWidgets('Use [H]old renders on the Target Panel when a held combatant '
+        'is selected out-of-turn', (tester) async {
+      await pumpScreen(
+        tester,
+        makeTurnState(
+          activeSegment: 5,
+          activeCombatantId: 'actor',
+          targetCombatantId: 'holder',
+          combatants: [
+            makeCombatant(id: 'actor', phaseSlots: [PhaseSlot(segment: 5)]),
+            ...heldRoster(),
+          ],
+        ),
+      );
+
+      expect(
+        inPanel('target-combatant-panel', find.text('Use [H]old')),
+        findsOneWidget,
+      );
+      // The actor has no pending hold — their button stays a declaration.
+      expect(
+        inPanel('active-combatant-panel', find.text('Use [H]old')),
+        findsNothing,
+      );
+      expect(
+        inPanel('active-combatant-panel', find.text('[H]old Action')),
+        findsOneWidget,
+      );
+    });
+
+    testWidgets('no Use [H]old renders on the Target Panel without a held '
+        'slot', (tester) async {
+      await pumpScreen(
+        tester,
+        makeTurnState(
+          activeSegment: 5,
+          activeCombatantId: 'actor',
+          targetCombatantId: 'free',
+          combatants: [
+            makeCombatant(id: 'actor', phaseSlots: [PhaseSlot(segment: 5)]),
+            makeCombatant(id: 'free', phaseSlots: [PhaseSlot(segment: 5)]),
+          ],
+        ),
+      );
+
+      expect(find.byKey(const Key('target-action-use-hold')), findsNothing);
+    });
+
+    testWidgets('pressing Use [H]old on the Actor Panel consumes the held '
+        'action', (tester) async {
+      final container = await pumpScreen(
+        tester,
+        makeTurnState(
+          activeSegment: 5,
+          activeCombatantId: 'holder',
+          combatants: heldRoster(),
+        ),
+      );
+
+      await tester.tap(find.byKey(const Key('actor-action-hold')));
+      await tester.pumpAndSettle();
+
+      final holder = container
+          .read(turnEngineProvider)
+          .combatants
+          .firstWhere((combatant) => combatant.id == 'holder');
+      expect(holder.phaseSlots.first.status, PhaseStatus.spent);
+      expect(holder.statusBadges, isNot(contains(PhaseStatus.held)));
+      // The contextual label reverts to the declaration button.
+      expect(
+        inPanel('active-combatant-panel', find.text('Use [H]old')),
+        findsNothing,
+      );
+      expect(
+        inPanel('active-combatant-panel', find.text('[H]old Action')),
+        findsOneWidget,
+      );
+    });
+
+    testWidgets('pressing Use [H]old on the Target Panel consumes the held '
+        'action without moving the timeline cursor', (tester) async {
+      final container = await pumpScreen(
+        tester,
+        makeTurnState(
+          activeSegment: 5,
+          activeCombatantId: 'actor',
+          targetCombatantId: 'holder',
+          combatants: [
+            makeCombatant(id: 'actor', phaseSlots: [PhaseSlot(segment: 5)]),
+            ...heldRoster(),
+          ],
+        ),
+      );
+
+      await tester.tap(find.byKey(const Key('target-action-use-hold')));
+      await tester.pumpAndSettle();
+
+      final state = container.read(turnEngineProvider);
+      final holder = state.combatants
+          .firstWhere((combatant) => combatant.id == 'holder');
+      expect(holder.phaseSlots.first.status, PhaseStatus.spent);
+      expect(holder.statusBadges, isNot(contains(PhaseStatus.held)));
+      // The main timeline cursor is untouched (out-of-turn interrupt).
+      expect(state.activeSegment, 5);
+      expect(state.activeCombatantId, 'actor');
+      // The target button disappears once the hold is consumed.
+      expect(find.byKey(const Key('target-action-use-hold')), findsNothing);
     });
   });
 }

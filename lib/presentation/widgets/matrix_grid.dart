@@ -25,6 +25,9 @@ const Color kActiveRowColor = Color(0x33FFB300);
 /// Background tint for the row of the targeted combatant.
 const Color kTargetRowColor = Color(0x332979FF);
 
+/// Virtual `[HOLD]` marker tile color (view-layer hold span indicators).
+const Color kHoldMarkerColor = Color(0xFF2E7D32);
+
 /// Standard indicator tile color ([PhaseStatus.scheduled]).
 const Color kScheduledTileColor = Color(0xFFE0E0E0);
 
@@ -62,6 +65,36 @@ const Color kHaymakerWindupColor = Color(0xFFFFE0B2);
 
 /// "Strikes/Resolves" haymaker marker tile color.
 const Color kHaymakerResolutionColor = Color(0xFFEF9A9A);
+
+/// Virtual `[HOLD]` span marker: rendered across the intermediate segments
+/// between the segment of hold declaration and the actor's next natural DEX
+/// phase (see `virtualHoldLabel` in `lib/domain/services/phase_display.dart`).
+/// View-layer only — the timeline model is never mutated.
+class HoldMarkerTile extends StatelessWidget {
+  const HoldMarkerTile({super.key});
+
+  @override
+  Widget build(BuildContext context) {
+    return Tooltip(
+      message: 'Action held — may interrupt before the next DEX phase',
+      child: Container(
+        padding: const EdgeInsets.symmetric(horizontal: 5, vertical: 2),
+        decoration: BoxDecoration(
+          color: kHoldMarkerColor,
+          borderRadius: BorderRadius.circular(4),
+        ),
+        child: const Text(
+          '[HOLD]',
+          style: TextStyle(
+            fontSize: 10,
+            fontWeight: FontWeight.w700,
+            color: Colors.white,
+          ),
+        ),
+      ),
+    );
+  }
+}
 
 /// Wind-up (`[M]`) or "Strikes/Resolves" marker tile for a declared
 /// haymaker (see [HaymakerDeclaration]). Rendered separately from the base
@@ -538,25 +571,38 @@ class _CombatantRow extends StatelessWidget {
                         phaseSlotDisplayLabel(combatant, slot, activeSegment),
                   ],
                   markers: <Widget>[
+                    // Dying strips standard active maneuver icons: no
+                    // haymaker wind-up/resolution markers render on the row.
                     // The wind-up lives only in the declaring Turn; a
                     // deferred (Segment 12) declaration renders its
                     // "Strikes" marker on Segment 1 of Turn N+1 instead.
-                    for (final declaration in haymakers)
-                      if (declaration.declaredSegment == segment &&
-                          declaration.declaredTurn == turnNumber)
-                        HaymakerMarkerTile.windup(
-                          key: Key(
-                            'haymaker-windup-${combatant.id}-$segment',
+                    if (combatant.status != CombatantStatus.dying)
+                      for (final declaration in haymakers)
+                        if (declaration.declaredSegment == segment &&
+                            declaration.declaredTurn == turnNumber)
+                          HaymakerMarkerTile.windup(
+                            key: Key(
+                              'haymaker-windup-${combatant.id}-$segment',
+                            ),
                           ),
-                        ),
-                    for (final declaration in haymakers)
-                      if (declaration.resolutionSegment == segment &&
-                          declaration.resolutionTurn == turnNumber)
-                        HaymakerMarkerTile.resolution(
-                          key: Key(
-                            'haymaker-resolution-${combatant.id}-$segment',
+                    if (combatant.status != CombatantStatus.dying)
+                      for (final declaration in haymakers)
+                        if (declaration.resolutionSegment == segment &&
+                            declaration.resolutionTurn == turnNumber)
+                          HaymakerMarkerTile.resolution(
+                            key: Key(
+                              'haymaker-resolution-${combatant.id}-$segment',
+                            ),
                           ),
-                        ),
+                    // Virtual green [HOLD] span markers (view-layer only):
+                    // rendered from the held phase's segment up to (not
+                    // including) the actor's next natural DEX phase while
+                    // the hold is active (see virtualHoldLabel).
+                    if (virtualHoldLabel(combatant, segment, activeSegment) !=
+                        null)
+                      HoldMarkerTile(
+                        key: Key('hold-marker-${combatant.id}-$segment'),
+                      ),
                   ],
                 ),
               ),

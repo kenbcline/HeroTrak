@@ -292,7 +292,7 @@ void main() {
     });
   });
 
-  group('Interrupt with [H]old', () {
+  group('[H]old Action', () {
     test('sets the active phase to held and badges the subject', () {
       final container = makeContainer(
         makeTurnState(activeSegment: 6, activeCombatantId: 'c1', combatants: [
@@ -740,6 +740,123 @@ void main() {
       // caller stages Post-12 again) and never wraps the Turn by itself.
       expect(notifier.selectNextPhaseSlot(), isFalse);
       expect(container.read(turnEngineProvider).turnNumber, 1);
+    });
+  });
+
+  group('action lockdown on mandatory recovery phases', () {
+    void expectLocked(
+      ProviderContainer container,
+      ActionDefinition action,
+    ) {
+      final notifier = container.read(turnEngineProvider.notifier);
+      final before = container.read(turnEngineProvider);
+
+      expect(() => notifier.executeAction(action), throwsStateError);
+      // The rejection is atomic: the turn state is unchanged.
+      expect(container.read(turnEngineProvider), before);
+    }
+
+    test('KO\'d subjects: Haymaker, Abort and Hold are all suppressed', () {
+      final container = makeContainer(
+        makeTurnState(activeSegment: 3, activeCombatantId: 'c1', combatants: [
+          makeCombatant(id: 'c1', phaseSlots: [makeSlot(segment: 5)])
+              .copyWith(status: CombatantStatus.knockedOut),
+        ]),
+      );
+
+      expectLocked(container, ActionDefinition.declareHaymaker);
+      expectLocked(container, ActionDefinition.abortToDefensiveAction);
+      expectLocked(container, ActionDefinition.interruptWithHold);
+    });
+
+    test('dying subjects: Haymaker, Abort and Hold are all suppressed', () {
+      final container = makeContainer(
+        makeTurnState(activeSegment: 3, activeCombatantId: 'c1', combatants: [
+          makeCombatant(id: 'c1', phaseSlots: [makeSlot(segment: 5)])
+              .copyWith(status: CombatantStatus.dying),
+        ]),
+      );
+
+      expectLocked(container, ActionDefinition.declareHaymaker);
+      expectLocked(container, ActionDefinition.abortToDefensiveAction);
+      expectLocked(container, ActionDefinition.interruptWithHold);
+    });
+
+    test('stunned subjects are locked while the [CLR STUN] phase is pending', () {
+      final container = makeContainer(
+        makeTurnState(activeSegment: 3, activeCombatantId: 'c1', combatants: [
+          makeCombatant(id: 'c1', phaseSlots: [makeSlot(segment: 5)])
+              .copyWith(status: CombatantStatus.stunned),
+        ]),
+      );
+
+      expectLocked(container, ActionDefinition.declareHaymaker);
+      expectLocked(container, ActionDefinition.abortToDefensiveAction);
+      expectLocked(container, ActionDefinition.interruptWithHold);
+    });
+
+    test('the lock lifts once the mandatory phase clears', () {
+      final container = makeContainer(
+        makeTurnState(activeSegment: 3, activeCombatantId: 'c1', combatants: [
+          makeCombatant(id: 'c1', phaseSlots: [makeSlot(segment: 5)])
+              .copyWith(status: CombatantStatus.stunned),
+        ]),
+      );
+      final notifier = container.read(turnEngineProvider.notifier);
+
+      // Recovered to OK: the mandatory phase is gone — maneuvers work again.
+      notifier.setCombatantStatus('c1', CombatantStatus.normal);
+      expect(
+        () => notifier.executeAction(ActionDefinition.interruptWithHold),
+        returnsNormally,
+      );
+    });
+
+    test('normal combatants are never locked', () {
+      for (final action in ActionDefinition.standardActions) {
+        final container = makeContainer(
+          makeTurnState(activeSegment: 3, activeCombatantId: 'c1', combatants: [
+            makeCombatant(id: 'c1', phaseSlots: [makeSlot(segment: 5)]),
+          ]),
+        );
+        final notifier = container.read(turnEngineProvider.notifier);
+        expect(() => notifier.executeAction(action), returnsNormally);
+      }
+    });
+  });
+
+  group('Use [H]old', () {
+    test('consumes the held action and clears the held badge', () {
+      final container = makeContainer(
+        makeTurnState(activeSegment: 6, activeCombatantId: 'c1', combatants: [
+          makeCombatant(id: 'c1', phaseSlots: [
+            makeSlot(segment: 6),
+            makeSlot(segment: 10),
+          ]),
+        ]),
+      );
+      final notifier = container.read(turnEngineProvider.notifier);
+
+      notifier
+        ..executeAction(ActionDefinition.interruptWithHold)
+        ..useHeldAction('c1');
+
+      final subject = subjectOf(container, 'c1');
+      expect(subject.phaseSlots[0].status, PhaseStatus.spent);
+      expect(subject.statusBadges, isNot(contains(PhaseStatus.held)));
+    });
+
+    test('throws StateError when no hold is pending', () {
+      final container = makeContainer(
+        makeTurnState(activeSegment: 6, activeCombatantId: 'c1', combatants: [
+          makeCombatant(id: 'c1', phaseSlots: [makeSlot(segment: 6)]),
+        ]),
+      );
+      final notifier = container.read(turnEngineProvider.notifier);
+      final before = container.read(turnEngineProvider);
+
+      expect(() => notifier.useHeldAction('c1'), throwsStateError);
+      expect(container.read(turnEngineProvider), before);
     });
   });
 }

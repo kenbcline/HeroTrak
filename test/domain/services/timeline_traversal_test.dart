@@ -542,4 +542,149 @@ void main() {
       );
     });
   });
+
+  group('virtual [HOLD] traversal stops', () {
+    // `holder` holds its Segment-3 phase — its virtual [HOLD] span is (3, 13)
+    // (no later natural phase this Turn); `late` acts on Segment 8.
+    List<Combatant> heldTimeline() => [
+          makeCombatant(
+            id: 'holder',
+            dex: 10,
+            phaseSlots: [makeSlot(segment: 3, status: PhaseStatus.held)],
+          ),
+          makeCombatant(id: 'late', dex: 20, phaseSlots: [makeSlot(segment: 8)]),
+        ];
+
+    test('findNextPhasePosition steps onto the intermediate virtual hold '
+        'segment (Segment 4 when held on 3)', () {
+      final next = findNextPhasePosition(
+        makeTurnState(
+          activeSegment: 3,
+          activeCombatantId: 'holder',
+          combatants: heldTimeline(),
+        ),
+      );
+
+      expect(next, const TimelinePosition(segment: 4, combatantId: 'holder'));
+    });
+
+    test('findPreviousPhasePosition steps backward onto the intermediate '
+        'virtual hold segment', () {
+      final previous = findPreviousPhasePosition(
+        makeTurnState(
+          activeSegment: 5,
+          activeCombatantId: 'holder',
+          combatants: heldTimeline(),
+        ),
+      );
+
+      expect(
+        previous,
+        const TimelinePosition(segment: 4, combatantId: 'holder'),
+      );
+    });
+
+    test('changing the slot status to spent removes virtual hold stops from '
+        'traversal', () {
+      final released = [
+        makeCombatant(
+          id: 'holder',
+          dex: 10,
+          phaseSlots: [makeSlot(segment: 3, status: PhaseStatus.spent)],
+        ),
+        makeCombatant(id: 'late', dex: 20, phaseSlots: [makeSlot(segment: 8)]),
+      ];
+      final state = makeTurnState(activeSegment: 3, combatants: released);
+
+      expect(virtualHoldIdsAtSegment(state, 4), isEmpty);
+      expect(virtualHoldIdsAtSegment(state, 7), isEmpty);
+
+      // With the hold consumed the walk skips straight to the next real phase.
+      expect(
+        findNextPhasePosition(
+          makeTurnState(activeSegment: 3, combatants: released),
+        ),
+        const TimelinePosition(segment: 8, combatantId: 'late'),
+      );
+    });
+
+    test('stepping back from the segment queue lands on the virtual hold stop '
+        'at the current segment', () {
+      final previous = findPreviousPhasePosition(
+        makeTurnState(
+          activeSegment: 8,
+          activeCombatantId: 'late',
+          combatants: heldTimeline(),
+        ),
+      );
+
+      // Segment 8 is inside the hold span: the holding combatant is the
+      // previous stop even though their baseline slot sits on Segment 3.
+      expect(
+        previous,
+        const TimelinePosition(segment: 8, combatantId: 'holder'),
+      );
+    });
+
+    test('a cursor on a virtual hold stop steps back one segment at a time '
+        'without double-highlighting', () {
+      var state = makeTurnState(
+        activeSegment: 8,
+        activeCombatantId: 'holder',
+        combatants: heldTimeline(),
+      );
+
+      final visited = <TimelinePosition>[];
+      for (var i = 0; i < 5; i++) {
+        final previous = findPreviousPhasePosition(state);
+        if (previous == null) break;
+        visited.add(previous);
+        state = state.copyWith(
+          activeSegment: previous.segment,
+          activeCombatantId: previous.combatantId,
+        );
+      }
+
+      // Each span segment back to the Segment-3 baseline slot is visited
+      // exactly once — the holder is never highlighted twice in one step.
+      expect(visited, const [
+        TimelinePosition(segment: 7, combatantId: 'holder'),
+        TimelinePosition(segment: 6, combatantId: 'holder'),
+        TimelinePosition(segment: 5, combatantId: 'holder'),
+        TimelinePosition(segment: 4, combatantId: 'holder'),
+        TimelinePosition(segment: 3, combatantId: 'holder'),
+      ]);
+    });
+
+    test('walking back across the span visits each virtual hold segment '
+        'exactly once', () {
+      var state = makeTurnState(
+        activeSegment: 8,
+        activeCombatantId: 'late',
+        combatants: heldTimeline(),
+      );
+
+      final visited = <TimelinePosition>[];
+      for (var i = 0; i < 8; i++) {
+        final previous = findPreviousPhasePosition(state);
+        if (previous == null) break;
+        visited.add(previous);
+        state = state.copyWith(
+          activeSegment: previous.segment,
+          activeCombatantId: previous.combatantId,
+        );
+      }
+
+      // One stop per segment across the whole span (8 → 3): no pair is
+      // re-traced, so the combatant is never double-highlighted.
+      expect(visited, const [
+        TimelinePosition(segment: 8, combatantId: 'holder'),
+        TimelinePosition(segment: 7, combatantId: 'holder'),
+        TimelinePosition(segment: 6, combatantId: 'holder'),
+        TimelinePosition(segment: 5, combatantId: 'holder'),
+        TimelinePosition(segment: 4, combatantId: 'holder'),
+        TimelinePosition(segment: 3, combatantId: 'holder'),
+      ]);
+    });
+  });
 }

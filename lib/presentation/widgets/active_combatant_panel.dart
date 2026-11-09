@@ -3,6 +3,8 @@ import 'package:flutter_riverpod/flutter_riverpod.dart';
 
 import '../../domain/actions/actions.dart';
 import '../../domain/models/models.dart';
+import '../../domain/services/phase_display.dart';
+import '../../domain/services/timeline_traversal.dart';
 import '../state/turn_engine_notifier.dart';
 
 /// Left bottom panel: the **Active Combatant (Actor)** — the owner of the
@@ -10,7 +12,10 @@ import '../state/turn_engine_notifier.dart';
 ///
 /// Shows the actor's name and Faction badge, the primary stats (SPD, DEX,
 /// EGO), active status badges, and the initiative actions (`Declare
-/// Haymaker`, `Interrupt with Hold`) bound directly to the actor.
+/// Haymaker`, `[H]old Action` / `Use [H]old`) bound directly to the actor.
+/// While the actor's upcoming phase renders `[REC]` / `[CLR STUN]` the
+/// maneuver buttons are hard-locked — the mandatory recovery/clear-stun
+/// action is the only legal choice (see [isPhaseActionLocked]).
 class ActiveCombatantPanel extends ConsumerWidget {
   const ActiveCombatantPanel({super.key});
 
@@ -115,37 +120,67 @@ class _ActorDetails extends StatelessWidget {
         ),
         const SizedBox(height: 6),
         Consumer(
-          builder: (context, ref, child) => Wrap(
-            key: const Key('actor-actions'),
-            spacing: 8,
-            runSpacing: 4,
-            children: <Widget>[
-              OutlinedButton(
-                key: const Key('actor-action-haymaker'),
-                onPressed: () => ActiveCombatantPanel._execute(
-                  ref,
-                  ActionDefinition.declareHaymaker,
-                  combatant.id,
+          builder: (context, ref, child) {
+            // Hard-lock: while the upcoming phase is the mandatory
+            // recovery/clear-stun action, Haymaker and Hold are disabled.
+            final locked = isPhaseActionLocked(combatant, state.activeSegment);
+            // Contextual hold button: an actor with a pending held action
+            // resolves it via "Use [H]old" instead of declaring a new hold —
+            // shown while the cursor sits on their declaring phase
+            // (PhaseStatus.held slot), on any virtual [HOLD] stop
+            // (isVirtualHoldStop), or beyond, until the hold is consumed.
+            final holding = isVirtualHoldStop(combatant, state.activeSegment) ||
+                combatant.phaseSlots
+                    .any((slot) => slot.status == PhaseStatus.held);
+            return Wrap(
+              key: const Key('actor-actions'),
+              spacing: 8,
+              runSpacing: 4,
+              children: <Widget>[
+                OutlinedButton(
+                  key: const Key('actor-action-haymaker'),
+                  onPressed: locked
+                      ? null
+                      : () => ActiveCombatantPanel._execute(
+                            ref,
+                            ActionDefinition.declareHaymaker,
+                            combatant.id,
+                          ),
+                  child: const Text('Declare Hay[M]aker'),
                 ),
-                child: const Text('Declare Hay[M]aker'),
-              ),
-              OutlinedButton(
-                key: const Key('actor-action-hold'),
-                onPressed: () => ActiveCombatantPanel._execute(
-                  ref,
-                  ActionDefinition.interruptWithHold,
-                  combatant.id,
+                OutlinedButton(
+                  key: const Key('actor-action-hold'),
+                  // "Use [H]old" (hold resolution) stays enabled even on a
+                  // locked recovery phase; only declaring a new hold is
+                  // hard-locked with the other maneuvers.
+                  onPressed: holding
+                      ? () {
+                          try {
+                            ref
+                                .read(turnEngineProvider.notifier)
+                                .useHeldAction(combatant.id);
+                          } on StateError {
+                            // Non-modal UX: silent no-op.
+                          }
+                        }
+                      : locked
+                          ? null
+                          : () => ActiveCombatantPanel._execute(
+                                ref,
+                                ActionDefinition.interruptWithHold,
+                                combatant.id,
+                              ),
+                  child: Text(holding ? 'Use [H]old' : '[H]old Action'),
                 ),
-                child: const Text('Interrupt with [H]old'),
-              ),
-              OutlinedButton(
-                key: const Key('actor-action-clear'),
-                onPressed: () =>
-                    ref.read(turnEngineProvider.notifier).clearAction(combatant.id),
-                child: const Text('[C]lear Action'),
-              ),
-            ],
-          ),
+                OutlinedButton(
+                  key: const Key('actor-action-clear'),
+                  onPressed: () =>
+                      ref.read(turnEngineProvider.notifier).clearAction(combatant.id),
+                  child: const Text('[C]lear Action'),
+                ),
+              ],
+            );
+          },
         ),
       ],
     );

@@ -118,7 +118,7 @@ void main() {
 
       // Initiative actions on the Actor panel, reaction on the Target panel.
       expect(find.text('Declare Hay[M]aker'), findsOneWidget);
-      expect(find.text('Interrupt with [H]old'), findsOneWidget);
+      expect(find.text('[H]old Action'), findsOneWidget);
       expect(find.text('[A]bort to Defensive Action'), findsOneWidget);
     });
 
@@ -435,7 +435,7 @@ void main() {
       expect(container.read(turnEngineProvider).activeCombatantId, 'actor');
     });
 
-    testWidgets('KeyH executes Interrupt with [H]old', (tester) async {
+    testWidgets('KeyH executes [H]old Action', (tester) async {
       final container = await pumpScreen(
         tester,
         makeTurnState(activeSegment: 1, activeCombatantId: 'c1', combatants: [
@@ -550,7 +550,7 @@ void main() {
         ),
       );
 
-      await tester.tap(find.text('Interrupt with [H]old'));
+      await tester.tap(find.text('[H]old Action'));
       await tester.pumpAndSettle();
 
       expect(
@@ -723,6 +723,126 @@ void main() {
       await tester.pumpAndSettle();
       expect(find.text('Start Next Turn?'), findsNothing);
       expect(container.read(selectedColumnProvider), 'post12');
+    });
+  });
+
+  group('panel section headers and hold button states', () {
+    testWidgets('section headers label the Acting and Target panels',
+        (tester) async {
+      await pumpScreen(
+        tester,
+        makeTurnState(activeSegment: 1, combatants: [
+          makeCombatant(id: 'x', phaseSlots: [makeSlot(segment: 1)]),
+        ]),
+      );
+
+      expect(find.byKey(const Key('acting-combatant-header')), findsOneWidget);
+      expect(find.text('Acting Combatant'), findsOneWidget);
+      expect(find.byKey(const Key('target-combatant-header')), findsOneWidget);
+      expect(find.text('Target Combatant'), findsOneWidget);
+    });
+
+    testWidgets('hold button reads [H]old Action normally and Use [H]old '
+        'while a hold is active', (tester) async {
+      final container = await pumpScreen(
+        tester,
+        makeTurnState(activeSegment: 1, activeCombatantId: 'x', combatants: [
+          makeCombatant(id: 'x', phaseSlots: [makeSlot(segment: 1)]),
+        ]),
+      );
+
+      expect(find.text('[H]old Action'), findsOneWidget);
+      expect(find.text('Use [H]old'), findsNothing);
+
+      // Declare the hold — the button flips to the contextual label.
+      await tester.tap(find.text('[H]old Action'));
+      await tester.pumpAndSettle();
+      expect(find.text('Use [H]old'), findsOneWidget);
+      expect(find.text('[H]old Action'), findsNothing);
+
+      // Pressing Use [H]old consumes the held action and restores the label.
+      await tester.tap(find.text('Use [H]old'));
+      await tester.pumpAndSettle();
+      expect(find.text('[H]old Action'), findsOneWidget);
+      expect(
+        subjectOf(container, 'x').phaseSlots.single.status,
+        PhaseStatus.spent,
+      );
+    });
+
+    testWidgets('Use [H]old resolves an out-of-turn hold from the Target '
+        'Panel without advancing the timeline', (tester) async {
+      final container = await pumpScreen(
+        tester,
+        makeTurnState(
+          activeSegment: 5,
+          activeCombatantId: 'actor',
+          targetCombatantId: 'holder',
+          combatants: [
+            makeCombatant(id: 'actor', phaseSlots: [makeSlot(segment: 5)]),
+            makeCombatant(id: 'holder', phaseSlots: [
+              makeSlot(segment: 3, status: PhaseStatus.held),
+              makeSlot(segment: 8),
+            ]),
+          ],
+        ),
+      );
+
+      // Only the Target Panel offers the resolution — the actor holds
+      // nothing, so their button stays a declaration.
+      expect(find.text('Use [H]old'), findsOneWidget);
+
+      await tester.tap(find.byKey(const Key('target-action-use-hold')));
+      await tester.pumpAndSettle();
+
+      final state = container.read(turnEngineProvider);
+      expect(
+        subjectOf(container, 'holder').phaseSlots.first.status,
+        PhaseStatus.spent,
+      );
+      // The main timeline cursor is untouched (out-of-turn interrupt).
+      expect(state.activeSegment, 5);
+      expect(state.activeCombatantId, 'actor');
+    });
+
+    testWidgets('Haymaker and Hold buttons are disabled on a mandatory '
+        'recovery phase', (tester) async {
+      await pumpScreen(
+        tester,
+        makeTurnState(activeSegment: 3, activeCombatantId: 'x', combatants: [
+          makeCombatant(id: 'x', phaseSlots: [makeSlot(segment: 5)])
+              .copyWith(status: CombatantStatus.knockedOut),
+        ]),
+      );
+
+      final haymaker = tester.widget<OutlinedButton>(
+        find.byKey(const Key('actor-action-haymaker')),
+      );
+      final hold = tester.widget<OutlinedButton>(
+        find.byKey(const Key('actor-action-hold')),
+      );
+      expect(haymaker.onPressed, isNull);
+      expect(hold.onPressed, isNull);
+    });
+
+    testWidgets('Abort reaction is disabled on a mandatory recovery phase',
+        (tester) async {
+      await pumpScreen(
+        tester,
+        makeTurnState(
+          activeSegment: 3,
+          targetCombatantId: 't',
+          combatants: [
+            makeCombatant(id: 't', phaseSlots: [makeSlot(segment: 5)])
+                .copyWith(status: CombatantStatus.dying),
+          ],
+        ),
+      );
+
+      final abort = tester.widget<OutlinedButton>(
+        find.byKey(const Key('target-action-abort')),
+      );
+      expect(abort.onPressed, isNull);
     });
   });
 }

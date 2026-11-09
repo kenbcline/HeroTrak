@@ -807,8 +807,8 @@ void main() {
       );
     });
 
-    testWidgets('DYING suppresses natural/Post-12 REC while KO re-enables it',
-        (tester) async {
+    testWidgets('DYING renders [REC] on active phases and [BLEED] on Post-12 '
+        'while KO renders [REC] throughout', (tester) async {
       await pumpMatrix(
         tester,
         makeTurnState(activeSegment: 3, combatants: [
@@ -819,14 +819,15 @@ void main() {
         ]),
       );
 
-      // Dying: all natural Phase Recoveries are suppressed (no [REC]) and
-      // Post-12 Recovery is replaced by the [BLEED] indicator.
+      // Dying: standard active maneuver icons are stripped and [REC] phase
+      // markers render across the active phases; Post-12 keeps the [BLEED]
+      // indicator instead of [REC].
       expect(
         find.descendant(
           of: find.byKey(const Key('matrix-cell-dy-5')),
           matching: find.text('[REC]'),
         ),
-        findsNothing,
+        findsOneWidget,
       );
       expect(find.byKey(const Key('post12-bleed-dy')), findsOneWidget);
       expect(find.byKey(const Key('post12-rec-dy')), findsNothing);
@@ -1048,6 +1049,75 @@ void main() {
         expect(data.left, closeTo(header.left, 0.01), reason: '$column left');
         expect(data.width, closeTo(header.width, 0.01), reason: '$column width');
       });
+    });
+  });
+
+  group('virtual [HOLD] markers', () {
+    testWidgets('render across intermediate segments from the declaration '
+        'segment up to the next natural DEX phase', (tester) async {
+      await pumpMatrix(
+        tester,
+        makeTurnState(activeSegment: 7, combatants: [
+          makeCombatant(id: 'h', phaseSlots: [
+            makeSlot(segment: 6, status: PhaseStatus.held),
+            makeSlot(segment: 10),
+          ]),
+        ]),
+      );
+
+      // Window [6, 10): markers on 6..9.
+      for (final segment in [6, 7, 8, 9]) {
+        expect(
+          find.byKey(Key('hold-marker-h-$segment')),
+          findsOneWidget,
+          reason: 'segment $segment should carry a [HOLD] marker',
+        );
+      }
+      // No marker at/after the actor's next natural DEX phase.
+      expect(find.byKey(const Key('hold-marker-h-10')), findsNothing);
+      expect(find.byKey(const Key('hold-marker-h-5')), findsNothing);
+    });
+
+    testWidgets('clear automatically when the held action is consumed',
+        (tester) async {
+      final container = await pumpMatrix(
+        tester,
+        makeTurnState(activeSegment: 7, combatants: [
+          makeCombatant(id: 'h', phaseSlots: [
+            makeSlot(segment: 6, status: PhaseStatus.held),
+            makeSlot(segment: 10),
+          ]),
+        ]),
+      );
+
+      expect(find.byKey(const Key('hold-marker-h-7')), findsOneWidget);
+
+      // Consume the hold — markers clear with the derived state.
+      container.read(turnEngineProvider.notifier).useHeldAction('h');
+      await tester.pumpAndSettle();
+
+      expect(find.byKey(const Key('hold-marker-h-7')), findsNothing);
+    });
+
+    testWidgets('clear once the timeline cursor reaches the next natural '
+        'DEX phase', (tester) async {
+      final container = await pumpMatrix(
+        tester,
+        makeTurnState(activeSegment: 7, combatants: [
+          makeCombatant(id: 'h', phaseSlots: [
+            makeSlot(segment: 6, status: PhaseStatus.held),
+            makeSlot(segment: 10),
+          ]),
+        ]),
+      );
+
+      expect(find.byKey(const Key('hold-marker-h-7')), findsOneWidget);
+
+      container.read(turnEngineProvider.notifier).setActiveSegment(10);
+      await tester.pumpAndSettle();
+
+      expect(find.byKey(const Key('hold-marker-h-7')), findsNothing);
+      expect(find.byKey(const Key('hold-marker-h-9')), findsNothing);
     });
   });
 }
